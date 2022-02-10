@@ -76,6 +76,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+test.ipynb
 
 # IPython
 profile_default/
@@ -130,3 +131,7 @@ dmypy.json
 
 # datasets folder
 tiny-imagenet-200/
+
+# models
+SL_new/
+FSHA_d/

@@ -16,36 +16,6 @@ import FSHA_arch
 import datasets
 from datasets import *
 
-#load cifar10 dataset
-cpriv, cpub = load_cifar()
-cpriv5, cpub5 = load_cifar_5()
-
-n = 15
-c_priv = datasets.getImagesDS(cpriv, n)
-c_pub5 = datasets.getImagesDS(cpub5, n)
-
-datasets.plot(c_priv)
-datasets.plot(c_pub5)
-
-cpub10 = load_cifar_test_10()
-n = 15
-c_test0 = datasets.getImagesDS(cpub10[0], n)
-datasets.plot(c_test0)
-
-# training hparams
-batch_size = 64
-id_setup = 4
-hparams = {
-    'WGAN' : True,
-    'gradient_penalty' : 500.,
-    'style_loss' : None,
-    'w' : 3,
-    'lr_f' :  0.00001,
-    'lr_tilde' : 0.00001,
-    'lr_D' : 0.0001,
-}
-log_frequency = 100
-
 # original function for gradient plotting
 def plot_gradient(fsha_model, sl_model, dataset, itr):
   dif_category_fsha = []
@@ -202,38 +172,38 @@ def prepare_data(cpriv):
     c3x = []
     c3y = []
     for k in range(10):
-    c1 = []
-    c2 = []
-    c3 = []
-    c1_x = []
-    c2_x = []
-    c3_x = []
-    c1_y = []
-    c2_y = []
-    c3_y = []
-    for j in range(2000):
-        if len(c1) < 64:
-        if c_set[j][1].numpy() == np.array(k):
-            c1_x.append(c_set[j][0])
-            c1_y.append(c_set[j][1])
-            c1.append(j)
-        elif len(c3) < 64:
-        if c_set[j][1].numpy() == np.array(k):
-            c3_x.append(c_set[j][0])
-            c3_y.append(c_set[j][1])
-            c3.append(j)
-        if len(c2) < 64:
-        if c_set[j][1].numpy() == np.array((k+1)%10):
-            c2_x.append(c_set[j][0])
-            c2_y.append(c_set[j][1])
-            c2.append(j)
-    c1_x = tf.stack(c1_x, axis = 0)
-    c2_x = tf.stack(c2_x, axis = 0)
-    c3_x = tf.stack(c3_x, axis = 0)
-    c1x.append(c1_x)
-    c1y.append(c1_y)
-    c2x.append(c2_x)
-    c2y.append(c2_y)
-    c3x.append(c3_x)
-    c3y.append(c3_y)
+      c1 = []
+      c2 = []
+      c3 = []
+      c1_x = []
+      c2_x = []
+      c3_x = []
+      c1_y = []
+      c2_y = []
+      c3_y = []
+      for j in range(2000):
+          if len(c1) < 64:
+            if c_set[j][1].numpy() == np.array(k):
+              c1_x.append(c_set[j][0])
+              c1_y.append(c_set[j][1])
+              c1.append(j)
+          elif len(c3) < 64:
+            if c_set[j][1].numpy() == np.array(k):
+              c3_x.append(c_set[j][0])
+              c3_y.append(c_set[j][1])
+              c3.append(j)
+          if len(c2) < 64:
+            if c_set[j][1].numpy() == np.array((k+1)%10):
+              c2_x.append(c_set[j][0])
+              c2_y.append(c_set[j][1])
+              c2.append(j)
+      c1_x = tf.stack(c1_x, axis = 0)
+      c2_x = tf.stack(c2_x, axis = 0)
+      c3_x = tf.stack(c3_x, axis = 0)
+      c1x.append(c1_x)
+      c1y.append(c1_y)
+      c2x.append(c2_x)
+      c2y.append(c2_y)
+      c3x.append(c3_x)
+      c3y.append(c3_y)
     return c1x, c1y, c2x, c2y, c3x, c3y
