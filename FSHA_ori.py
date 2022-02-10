@@ -11,7 +11,7 @@ def distance_data(a,b):
     l = tf.losses.MeanSquaredError()
     return l(a, b)
 
-class FSHA:
+class FSHA_ori:
     
     def loadBiasNetwork(self, make_decoder, z_shape, channels):
         return make_decoder(z_shape, channels=channels)
@@ -27,7 +27,7 @@ class FSHA:
             self.batch_size = batch_size
 
             ## setup models
-            make_f, make_tilde_f, make_decoder, make_D = architectures.SETUPS[id_setup]
+            make_f, make_tilde_f, make_decoder, make_D = FSHA_arch.SETUPS[id_setup]
 
             self.f = make_f(input_shape)
             self.tilde_f = make_tilde_f(input_shape)
@@ -165,18 +165,50 @@ class FSHA:
         z_private_control = self.tilde_f(x_private, training=False)
         control = self.decoder(z_private_control, training=False)
         return tilde_x_private.numpy(), control.numpy()
+    
+    def get_gradient(self, x_private, label_private):
+        with tf.GradientTape(persistent=True) as tape:
 
+            #### Virtually, ON THE CLIENT SIDE:
+            # clients' smashed data
+            z_private = self.f(x_private, training=True)
+            ####################################
+
+
+            #### SERVER-SIDE:
+            # map to data space (for evaluation and style loss)
+            rec_x_private = self.decoder(z_private, training=True)
+            ## adversarial loss (f's output must similar be to \tilde{f}'s output):
+            adv_private_logits = self.D(z_private, training=True)
+            if self.hparams['WGAN']:
+                # print("Use WGAN loss")
+                f_loss = tf.reduce_mean(adv_private_logits)
+            else:
+                f_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(adv_private_logits), adv_private_logits, from_logits=True))
+            ##
+
+        var = z_private
+        gradients = tape.gradient(f_loss, var)
+        return gradients
 
     def __call__(self, iterations, log_frequency=500, verbose=False, progress_bar=True):
 
         n = int(iterations / log_frequency)
         LOG = np.zeros((n, 4))
-
+        dif_category = []
+        same_category = []
+        for i in range(10):
+          dif_category.append([])
+          same_category.append([])
+        dif_category_mean = []
+        dif_variance = []
+        same_variance = []
+        same_category_mean = []
         iterator = zip(self.client_dataset.take(iterations), self.attacker_dataset.take(iterations))
         if progress_bar:
             iterator = tqdm.tqdm(iterator , total=iterations)
 
-        i, j = 0, 0
+        i, m = 0, 0
         print("RUNNING...")
         for (x_private, label_private), (x_public, label_public) in iterator:
             log = self.train_step(x_private, x_public, label_private, label_public)
@@ -187,115 +219,44 @@ class FSHA:
                 VAL += log[3] / log_frequency
 
             if  i % log_frequency == 0:
-                LOG[j] = log
+                dif_category_mean_ = []
+                same_category_mean_ = []
+                for k in range(10):
+                  gp1 = self.get_gradient(c1x[k], c1y[k]).numpy()
+                  gp2 = self.get_gradient(c2x[k], c2y[k]).numpy()
+                  gp3 = self.get_gradient(c3x[k], c3y[k]).numpy()
+
+                  dif_category_fsha = []
+                  same_category_fsha = []
+                  
+                  for l in range(64):
+                    p1 = gp1[l].reshape(4096,)
+                    p2 = gp2[l].reshape(4096,)
+                    p3 = gp3[l].reshape(4096,)
+                    dif_category_fsha.append(get_cos_sim(p1,p2))
+                    same_category_fsha.append(get_cos_sim(p1,p3))
+                    dif_category_mean_.append(get_cos_sim(p1,p2))
+                    same_category_mean_.append(get_cos_sim(p1,p3))
+                  dif_category_fsha = np.array(dif_category_fsha)
+                  same_category_fsha = np.array(same_category_fsha)
+                  dif_category[k].append(np.mean(dif_category_fsha))
+                  same_category[k].append(np.mean(dif_category_fsha))
+                dif_category_mean_ = np.array(dif_category_mean_)
+                same_category_mean_ = np.array(same_category_mean_)
+                dif_category_mean.append(np.mean(dif_category_mean_))
+                same_category_mean.append(np.mean(same_category_mean_))
+                dif_variance.append(np.std(dif_category_mean_))
+                same_variance.append(np.std(same_category_mean_))
+
+                  
+                LOG[m] = log
 
                 if verbose:
                     print("log--%02d%%-%07d] validation: %0.4f" % ( int(i/iterations*100) ,i, VAL) )
 
                 VAL = 0
-                j += 1
+                m += 1
 
 
             i += 1
-        return LOG
-
-#----------------------------------------------------------------------------------------------------------------------
-
-
-class FSHA_binary_property(FSHA):
-    
-    def loadBiasNetwork(self, make_decoder, z_shape, channels):
-        class_num = self.hparams.get("class_num", 1)
-        return make_decoder(z_shape, class_num)
-    
-    def binary_accuracy(self, label, logits):
-    
-        if self.hparams.get('class_num', 1) == 1:
-            p = tf.nn.sigmoid(logits)
-            predicted = tf.cast( (p > .5), tf.float32)
-        else:
-            p = tf.nn.softmax(logits)
-            predicted = tf.argmax(p, 1)
-
-        correct_prediction = tf.equal(label, predicted)
-        return tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-
-    
-    def classification_loss(self, label, logits):
-        if self.hparams.get('class_num', 1) == 1:
-            return tf.reduce_mean(tf.keras.losses.binary_crossentropy(label, logits, from_logits=True))
-        else:
-            return tf.reduce_mean( tf.keras.losses.sparse_categorical_crossentropy(label, logits, from_logits=True) )
-        
-
-    @tf.function
-    def train_step(self, x_private, x_public, label_private, label_public):
-
-        with tf.GradientTape(persistent=True) as tape:
-
-            #### Virtually, ON THE CLIENT SIDE:
-            # clients' smashed data
-            z_private = self.f(x_private, training=True)
-            ####################################
-
-            #### SERVER-SIDE:
-            # map to data space (for evaluation and style loss)
-            clss_private_logits = self.decoder(z_private, training=True)
-            ## adversarial loss (f's output must be similar to \tilde{f}'s output):
-            adv_private_logits = self.D(z_private, training=True)
-            if self.hparams['WGAN']:
-                print("Use WGAN loss")
-                f_loss = tf.reduce_mean(adv_private_logits)
-            else:
-                f_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(adv_private_logits), adv_private_logits, from_logits=True))
-            ##
-
-            # attacker's classifier
-            z_public = self.tilde_f(x_public, training=True)
-            clss_public_logits = self.decoder(z_public, training=True)
-
-            # classificatio loss
-            public_classification_loss = self.classification_loss(label_public, clss_public_logits)
-            public_classification_accuracy = self.binary_accuracy(label_public, clss_public_logits)
-            tilde_f_loss = public_classification_loss
-
-            # discriminator on attacker's feature-space
-            adv_public_logits = self.D(z_public, training=True)
-            if self.hparams['WGAN']:
-                loss_discr_true = tf.reduce_mean(adv_public_logits)
-                loss_discr_fake = -tf.reduce_mean(adv_private_logits)
-                # discriminator's loss
-                D_loss = loss_discr_true + loss_discr_fake
-            else:
-                loss_discr_true = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(adv_public_logits), adv_public_logits, from_logits=True))
-                loss_discr_fake = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.zeros_like(adv_private_logits), adv_private_logits, from_logits=True))
-                # discriminator's loss
-                D_loss = (loss_discr_true + loss_discr_fake) / 2
-
-            if 'gradient_penalty' in self.hparams:
-                print("Use GP")
-                w = float(self.hparams['gradient_penalty'])
-                D_gradient_penalty = self.gradient_penalty(z_private, z_public)
-                D_loss += D_gradient_penalty * w
-
-            ##################################################################
-            ## attack validation #####################
-            private_classification_accuracy = self.binary_accuracy(label_private, clss_private_logits)
-            ############################################
-            ##################################################################
-
-
-        var = self.f.trainable_variables
-        gradients = tape.gradient(f_loss, var)
-        self.optimizer0.apply_gradients(zip(gradients, var))
-
-        var = self.tilde_f.trainable_variables + self.decoder.trainable_variables
-        gradients = tape.gradient(tilde_f_loss, var)
-        self.optimizer1.apply_gradients(zip(gradients, var))
-
-        var = self.D.trainable_variables
-        gradients = tape.gradient(D_loss, var)
-        self.optimizer2.apply_gradients(zip(gradients, var))
-
-
-        return f_loss, tilde_f_loss, D_loss, private_classification_accuracy, public_classification_accuracy
+        return LOG, dif_category, same_category, dif_category_mean, same_category_mean, dif_variance, same_variance

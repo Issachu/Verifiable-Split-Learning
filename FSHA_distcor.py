@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import tqdm
-import datasets, architectures
+import datasets, FSHA_arch
 import defense
 from FSHA import *
 
