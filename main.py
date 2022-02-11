@@ -1,5 +1,5 @@
 import util
-from FSHA_discriminator import *
+from FSHA_dnoc import *
 import datasets
 from datasets import *
 
@@ -11,7 +11,7 @@ n = 15
 c_priv = datasets.getImagesDS(cpriv, n)
 c_pub5 = datasets.getImagesDS(cpub5, n)
 
-# datasets.plot(c_priv)
+# datasets.plot(c_priv)ex
 # datasets.plot(c_pub5)
 
 # hparams
@@ -28,9 +28,11 @@ hparams = {
 }
 
 fshad = FSHA_worst(cpriv, cpub, id_setup-1, batch_size, hparams)
-iterations = 1
-log_frequency = 1
+iterations = 10000
+log_frequency = 500
 LOGs, dif_category_d, same_category_d, dif_category_mean_d, same_category_mean_d, dif_variance_d, same_variance_d, gradients_d = fshad(iterations, verbose=True, progress_bar=False, log_frequency=log_frequency)
+
+print(LOGs)
 
 x = np.arange(0, iterations+log_frequency, log_frequency)
 y1 = same_category_mean_d
@@ -48,8 +50,8 @@ plt.title('gradient similarity curve')
 plt.xlabel('iteration')
 plt.ylabel('cosine similarity')
 plt.legend()
-plt.savefig('FSHA_d_curve.pdf')
-plt.show()
+plt.savefig('FSHA_dnoc_curve.pdf')
+plt.close()
 
 l3 = plt.plot(x,y3,'g--', label='gradients')
 plt.plot(x, y3, 'g*-')
@@ -57,5 +59,4 @@ plt.title('gradient value')
 plt.xlabel('iteration')
 plt.ylabel('gradient')
 plt.legend()
-plt.savefig('FSHA_d_gradient_curve.pdf')
-plt.show()
+plt.savefig('FSHA_dnoc_gradient_curve.pdf')
