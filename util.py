@@ -1,10 +1,3 @@
-
-# cosine similarity
-def get_cos_sim(v1, v2):
-  num = float(np.dot(v1,v2))
-  denom = np.linalg.norm(v1) * np.linalg.norm(v2)
-  return 0.5 + 0.5 * (num / denom) if denom != 0 else 0
-
 import tensorflow as tf
 import numpy as np
 import tqdm
@@ -15,6 +8,25 @@ import FSHA
 import FSHA_arch
 import datasets
 from datasets import *
+
+# cosine similarity
+def get_cos_sim(v1, v2):
+  num = float(np.dot(v1,v2))
+  denom = np.linalg.norm(v1) * np.linalg.norm(v2)
+  return 0.5 + 0.5 * (num / denom) if denom != 0 else 0
+
+def plot(X):
+    n = len(X)
+    X = (X+1)/2
+    fig, ax = plt.subplots(1, n, figsize=(n*3,3))
+    plt.axis('off')
+    plt.subplots_adjust(wspace=0, hspace=-.05)
+    for i in range(n):
+        ax[i].imshow((X[i]), cmap='inferno');  
+        ax[i].set(xticks=[], yticks=[])
+        ax[i].set_aspect('equal')
+        
+    return fig
 
 # original function for gradient plotting
 def plot_gradient(fsha_model, sl_model, dataset, itr):

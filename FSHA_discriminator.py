@@ -90,7 +90,7 @@ class FSHA_worst:
             #### SUB-SERVER-SIDE:
             ## loss (f's output must similar be to \tilde{f}'s output):
             private_logits = self.S(z_private, training=True)
-            sf_loss = tf.keras.losses.sparse_categorical_crossentropy(label_private, private_logits, from_logits=True)
+            sf_loss = tf.keras.losses.sparse_categorical_crossentropy(label_private, private_logits, from_logits=True)/self.batch_size
             ##
             
             # print(f_loss_1)
@@ -98,6 +98,8 @@ class FSHA_worst:
                 # print("Use WGAN loss")
                 adv_private_logits1 = tf.matmul(category_index,adv_private_logits)
                 adv_private_logits2 = tf.reduce_sum(adv_private_logits1)
+                index = tf.argmax(adv_private_logits1)
+                print('f used category: ', index)
                 f_loss = tf.reduce_max(adv_private_logits2)
             else:
                 f_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(adv_private_logits), adv_private_logits, from_logits=True))
@@ -117,11 +119,12 @@ class FSHA_worst:
             adv_public_logits = self.D(z_public, training=True)
             if self.hparams['WGAN']:
                 adv_public_logits1 = tf.matmul(category_index,adv_public_logits)
-                adv_public_logits2 = tf.reduce_sum(adv_public_logits1)
-                adv_private_logits3 = tf.matmul(category_index,adv_private_logits)
-                adv_private_logits4 = tf.reduce_sum(adv_private_logits1)
+                adv_private_logits2 = tf.matmul(category_index,adv_private_logits)
+                adv_private_logits3 = tf.reduce_sum(adv_public_logits1 - adv_private_logits2)
+                index = tf.argmax(adv_private_logits3)
+                print('D used category: ', index)
                 # discriminator's loss
-                D_loss = tf.reduce_max(adv_public_logits2-adv_private_logits4)
+                D_loss = tf.reduce_max(adv_private_logits3)
             else:
                 loss_discr_true = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(adv_public_logits), adv_public_logits, from_logits=True))
                 loss_discr_fake = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.zeros_like(adv_private_logits), adv_private_logits, from_logits=True))
@@ -382,7 +385,7 @@ class FSHA_worst:
                 VAL += log[3] / log_frequency
 
             if  i % log_frequency == 0:
-                self.save_model('FSHA_d/model_%d'%(i))
+                self.save_model('FSHA_d1/model_%d'%(i))
                 LOG[j] = log
                 # print(category_number)
                 dif_category_mean_ = []

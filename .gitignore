@@ -120,6 +120,7 @@ venv.bak/
 
 # mkdocs documentation
 /site
+.DS_Store
 
 # mypy
 .mypy_cache/
@@ -132,6 +133,10 @@ dmypy.json
 # datasets folder
 tiny-imagenet-200/
 
-# models
+# models and results
 SL_new/
 FSHA_d/
+result/
+*.pdf
+*.jpg
+
