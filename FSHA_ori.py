@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tqdm
 import datasets, FSHA_arch
+import util
 
 def distance_data_loss(a,b):
     l = tf.losses.MeanSquaredError()
@@ -20,7 +21,7 @@ class FSHA_ori:
             input_shape = xpriv.element_spec[0].shape
             
             self.hparams = hparams
-
+            self.c1x, self.c1y, self.c2x, self.c2y, self.c3x, self.c3y = util.prepare_data(xpriv)
             # setup dataset
             self.client_dataset = xpriv.batch(batch_size, drop_remainder=True).repeat(-1)
             self.attacker_dataset = xpub.batch(batch_size, drop_remainder=True).repeat(-1)
@@ -191,6 +192,18 @@ class FSHA_ori:
         gradients = tape.gradient(f_loss, var)
         return gradients
 
+    def save_model(self, model_path):
+        self.f.save(model_path + '_f.ckpt')
+        self.tilde_f.save(model_path + '_tilde_f.ckpt')
+        self.D.save(model_path + '_D.ckpt')
+        self.decoder.save(model_path + '_decoder.ckpt')
+    
+    def load_model(self, model_path):
+        self.f = tf.keras.models.load_model(model_path + '_f.ckpt')
+        self.tilde_f = tf.keras.models.load_model(model_path + '_tilde_f.ckpt')
+        self.D = tf.keras.models.load_model(model_path + '_D.ckpt')
+        self.decoder = tf.keras.models.load_model(model_path + '_decoder.ckpt')
+
     def __call__(self, iterations, log_frequency=500, verbose=False, progress_bar=True):
 
         n = int(iterations / log_frequency)
@@ -219,12 +232,13 @@ class FSHA_ori:
                 VAL += log[3] / log_frequency
 
             if  i % log_frequency == 0:
+                self.save_model('FSHA_ori/model_%d'%(i))
                 dif_category_mean_ = []
                 same_category_mean_ = []
                 for k in range(10):
-                  gp1 = self.get_gradient(c1x[k], c1y[k]).numpy()
-                  gp2 = self.get_gradient(c2x[k], c2y[k]).numpy()
-                  gp3 = self.get_gradient(c3x[k], c3y[k]).numpy()
+                  gp1 = self.get_gradient(self.c1x[k], self.c1y[k]).numpy()
+                  gp2 = self.get_gradient(self.c2x[k], self.c2y[k]).numpy()
+                  gp3 = self.get_gradient(self.c3x[k], self.c3y[k]).numpy()
 
                   dif_category_fsha = []
                   same_category_fsha = []
@@ -233,10 +247,10 @@ class FSHA_ori:
                     p1 = gp1[l].reshape(4096,)
                     p2 = gp2[l].reshape(4096,)
                     p3 = gp3[l].reshape(4096,)
-                    dif_category_fsha.append(get_cos_sim(p1,p2))
-                    same_category_fsha.append(get_cos_sim(p1,p3))
-                    dif_category_mean_.append(get_cos_sim(p1,p2))
-                    same_category_mean_.append(get_cos_sim(p1,p3))
+                    dif_category_fsha.append(util.get_cos_sim(p1,p2))
+                    same_category_fsha.append(util.get_cos_sim(p1,p3))
+                    dif_category_mean_.append(util.get_cos_sim(p1,p2))
+                    same_category_mean_.append(util.get_cos_sim(p1,p3))
                   dif_category_fsha = np.array(dif_category_fsha)
                   same_category_fsha = np.array(same_category_fsha)
                   dif_category[k].append(np.mean(dif_category_fsha))

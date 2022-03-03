@@ -168,6 +168,7 @@ class SL_new:
                 VAL += log / log_frequency
 
             if  i % log_frequency == 0:
+                self.save_model('SL/model_%d'%(i))
                 LOG[j] = log
                 dif_category_mean_ = []
                 same_category_mean_ = []

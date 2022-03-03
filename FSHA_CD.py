@@ -3,7 +3,7 @@ import tensorflow as tf
 import tqdm
 import numpy as np
 import random
-import datasets, FSHA_arch, SL_arch
+import datasets, CD_arch, SL_arch
 import util
 
 def distance_data_loss(a,b):
@@ -14,7 +14,7 @@ def distance_data(a,b):
     l = tf.losses.MeanSquaredError()
     return l(a, b)
 
-class FSHA_worst:
+class FSHA_CD:
     
     def loadBiasNetwork(self, make_decoder, z_shape, channels):
         return make_decoder(z_shape, channels=channels)
@@ -34,7 +34,7 @@ class FSHA_worst:
             self.batch_size = batch_size
 
             ## setup models
-            make_f, make_tilde_f, make_decoder, make_D = FSHA_arch.SETUPS[id_setup]
+            make_f, make_tilde_f, make_decoder, make_D = CD_arch.SETUPS[id_setup]
             _, make_S = SL_arch.SETUPS[id_setup]
             _, classifier = SL_arch.SETUPS[id_setup]
 
@@ -68,7 +68,7 @@ class FSHA_worst:
     def addNoise(x, alpha):
         return x + tf.random.normal(x.shape) * alpha
 
-    @tf.function
+    # @tf.function
     def train_step(self, x_private, x_public, label_private, label_public, category_index):
 
         with tf.GradientTape(persistent=True) as tape:
@@ -86,29 +86,27 @@ class FSHA_worst:
             rec_x_private = self.decoder(z_private, training=True)
             ## adversarial loss (f's output must similar be to \tilde{f}'s output):
             adv_private_logits = self.D(z_private, training=True)
+            adv_private_logits = tf.multiply(tf.one_hot(tf.squeeze(label_private), 10), adv_private_logits) 
 
-            #### SUB-SERVER-SIDE:
-            ## loss (f's output must similar be to \tilde{f}'s output):
-            private_logits = self.S(z_private, training=True)
-            sf_loss = tf.keras.losses.sparse_categorical_crossentropy(label_private, private_logits, from_logits=True)/self.batch_size
-            ##
-            
-            # print(f_loss_1)
-            if self.hparams['WGAN']:
-                # print("Use WGAN loss")
-                adv_private_logits1 = tf.matmul(category_index,adv_private_logits)
-                adv_private_logits2 = tf.reduce_sum(adv_private_logits1, axis = 1)
-                # print('adv_private_logits2: ', adv_private_logits2)
-                index1 = tf.argmax(adv_private_logits2)
-                # print('f used category: ', index)
-                f_loss = tf.reduce_max(adv_private_logits2)
-            else:
-                f_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(adv_private_logits), adv_private_logits, from_logits=True))
+            adv_private_logits = tf.reduce_sum(adv_private_logits, axis = 1)
+            # adv_private_logits1 = tf.matmul(category_index,adv_private_logits)
+            # adv_private_logits2 = tf.reduce_sum(adv_private_logits1, axis = 1)
+            # # print('adv_private_logits2: ', adv_private_logits2)
+            # index1 = tf.argmax(adv_private_logits2)
+            # print('f used category: ', index)
+            f_loss = tf.reduce_mean(adv_private_logits)
             ##
 
+            #### SUPERVISED ENCODER:
             z_public = self.tilde_f(x_public, training=True)
             public_logits = self.c(z_public, training=True)
             c_loss = tf.keras.losses.sparse_categorical_crossentropy(label_public, public_logits, from_logits=True)
+
+            #### SUB-SERVER-SIDE:
+            ## loss (used to train a substitute server):
+            private_logits = self.S(z_private, training=True)
+            sf_loss = tf.keras.losses.sparse_categorical_crossentropy(label_private, private_logits, from_logits=True)/self.batch_size
+            ##
 
             # invertibility loss
             rec_x_public = self.decoder(z_public, training=True)
@@ -118,20 +116,22 @@ class FSHA_worst:
 
             # discriminator on attacker's feature-space
             adv_public_logits = self.D(z_public, training=True)
-            if self.hparams['WGAN']:
-                adv_public_logits1 = tf.matmul(category_index,adv_public_logits)
-                adv_private_logits2 = tf.matmul(category_index,adv_private_logits)
-                adv_private_logits3 = tf.reduce_sum(adv_public_logits1 - adv_private_logits2, axis = 1)
-                # print('adv_private_logits3: ', adv_private_logits3)
-                index2 = tf.argmax(adv_private_logits3)
-                # print('D used category: ', index)
-                # discriminator's loss
-                D_loss = tf.reduce_max(adv_private_logits3)
-            else:
-                loss_discr_true = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(adv_public_logits), adv_public_logits, from_logits=True))
-                loss_discr_fake = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.zeros_like(adv_private_logits), adv_private_logits, from_logits=True))
-                # discriminator's loss
-                D_loss = (loss_discr_true + loss_discr_fake) / 2
+            adv_public_logits = tf.multiply(tf.one_hot(tf.squeeze(label_public), 10), adv_public_logits) 
+            adv_public_logits = tf.reduce_sum(adv_public_logits, axis = 1)
+            loss_discr_true = tf.reduce_mean( adv_public_logits )
+            loss_discr_fake = -tf.reduce_mean( adv_private_logits)
+            # discriminator's loss
+            D_loss = loss_discr_true + loss_discr_fake
+            
+            # print(adv_private_logits)
+            # adv_public_logits1 = tf.matmul(category_index,adv_public_logits)
+            # adv_private_logits2 = tf.matmul(category_index,adv_private_logits)
+            # adv_private_logits3 = tf.reduce_sum(adv_public_logits1 - adv_private_logits2, axis = 1)
+            # # print('adv_private_logits3: ', adv_private_logits3)
+            # index2 = tf.argmax(adv_private_logits3)
+            # print('D used category: ', index)
+            # discriminator's loss
+            # D_loss = tf.reduce_max(adv_private_logits3)
 
             if 'gradient_penalty' in self.hparams:
                 # print("Use GP")
@@ -173,7 +173,7 @@ class FSHA_worst:
         self.optimizer2.apply_gradients(zip(gradients, var))
 
 
-        return (f_loss, tilde_f_loss, D_loss, loss_c_verification), (index1, index2)
+        return f_loss, tilde_f_loss, D_loss, loss_c_verification
 
     def get_gradient(self, x_private, label_private):
         category_index_n = []
@@ -207,21 +207,19 @@ class FSHA_worst:
 
 
             #### SERVER-SIDE:
+            # map to data space (for evaluation and style loss)
+            rec_x_private = self.decoder(z_private, training=True)
             ## adversarial loss (f's output must similar be to \tilde{f}'s output):
-            adv_private_logits = self.D(z_private, training=False)
-             #### SUB-SERVER-SIDE:
-            ## loss (f's output must similar be to \tilde{f}'s output):
-            private_logits = self.S(z_private, training=True)
-            sf_loss = tf.keras.losses.sparse_categorical_crossentropy(label_private, private_logits, from_logits=True)
-            ##
-            
-            if self.hparams['WGAN']:
-                # print("Use WGAN loss")
-                adv_private_logits1 = tf.matmul(category_index,adv_private_logits)
-                adv_private_logits2 = tf.reduce_sum(adv_private_logits1, axis = 1)
-                f_loss = tf.reduce_max(adv_private_logits2)
-            else:
-                f_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(adv_private_logits), adv_private_logits, from_logits=True)) + f_loss_1
+            adv_private_logits = self.D(z_private, training=True)
+            adv_private_logits = tf.multiply(tf.one_hot(tf.squeeze(label_private), 10), adv_private_logits) 
+
+            adv_private_logits = tf.reduce_sum(adv_private_logits, axis = 1)
+            # adv_private_logits1 = tf.matmul(category_index,adv_private_logits)
+            # adv_private_logits2 = tf.reduce_sum(adv_private_logits1, axis = 1)
+            # # print('adv_private_logits2: ', adv_private_logits2)
+            # index1 = tf.argmax(adv_private_logits2)
+            # print('f used category: ', index)
+            f_loss = tf.reduce_mean(adv_private_logits)
             ##
 
         var = z_private
@@ -379,8 +377,8 @@ class FSHA_worst:
 
             category_index = tf.constant(category_index_n)
 
-            log, index = self.train_step(x_private, x_public, label_private, label_private, category_index)
-            print(index)
+            log = self.train_step(x_private, x_public, label_private, label_private, category_index)
+            # print(index)
             if i == 0:
                 VAL = log[3]                     
             else:

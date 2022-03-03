@@ -137,6 +137,10 @@ tiny-imagenet-200/
 SL_new/
 FSHA_d/
 result/
+FSHA_d1/
+FSHA_dnoc/
+FSHA_ori/
 *.pdf
 *.jpg
+*.txt
 

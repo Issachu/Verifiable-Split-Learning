@@ -1,21 +1,22 @@
 import util
+from FSHA_ori import *
 from FSHA_discriminator import *
 import datasets
 from datasets import *
 
 #load cifar10 dataset
 cpriv, cpub = load_cifar()
-cpriv5, cpub5 = load_cifar_5()
+# cpriv5, cpub5 = load_cifar_5()
 
-n = 15
-c_priv = datasets.getImagesDS(cpriv, n)
-c_pub5 = datasets.getImagesDS(cpub5, n)
+# n = 15
+# c_priv = datasets.getImagesDS(cpriv, n)
+# c_pub5 = datasets.getImagesDS(cpub5, n)
 
 # datasets.plot(c_priv)ex
 # datasets.plot(c_pub5)
 
 # hparams
-batch_size = 640
+batch_size = 64
 id_setup = 4
 hparams = {
     'WGAN' : True,
@@ -27,12 +28,19 @@ hparams = {
     'lr_D' : 0.0001,
 }
 
-fshad = FSHA_worst(cpriv, cpub, id_setup-1, batch_size, hparams)
-iterations = 2
-log_frequency = 1
-LOGs, dif_category_d, same_category_d, dif_category_mean_d, same_category_mean_d, dif_variance_d, same_variance_d, gradients_d = fshad(iterations, verbose=True, progress_bar=False, log_frequency=log_frequency)
+fshad = FSHA_ori(cpriv, cpub, id_setup-1, batch_size, hparams)
+iterations = 10000
+log_frequency = 500
+LOGs, dif_category_d, same_category_d, dif_category_mean_d, same_category_mean_d, dif_variance_d, same_variance_d = fshad(iterations, verbose=True, progress_bar=False, log_frequency=log_frequency)
 
 print(LOGs)
+
+util.plot_feature_sim(fshad, cpriv)
+print("=========================== discriminator ===============================================================>")
+fshadw = FSHA_worst(cpriv, cpub, id_setup-1, batch_size, hparams)
+model_path = 'FSHA_d1/model_9500'
+fshadw.load_model(model_path)
+util.plot_feature_sim(fshad, cpriv)
 
 # x = np.arange(0, iterations+log_frequency, log_frequency)
 # y1 = same_category_mean_d

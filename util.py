@@ -15,18 +15,6 @@ def get_cos_sim(v1, v2):
   denom = np.linalg.norm(v1) * np.linalg.norm(v2)
   return 0.5 + 0.5 * (num / denom) if denom != 0 else 0
 
-def plot(X):
-    n = len(X)
-    X = (X+1)/2
-    fig, ax = plt.subplots(1, n, figsize=(n*3,3))
-    plt.axis('off')
-    plt.subplots_adjust(wspace=0, hspace=-.05)
-    for i in range(n):
-        ax[i].imshow((X[i]), cmap='inferno');  
-        ax[i].set(xticks=[], yticks=[])
-        ax[i].set_aspect('equal')
-        
-    return fig
 
 # original function for gradient plotting
 def plot_gradient(fsha_model, sl_model, dataset, itr):
@@ -172,6 +160,80 @@ def plot_gradient(fsha_model, sl_model, dataset, itr):
   plt.grid(axis="y",ls="-",color="purple",alpha=0.7)
   plt.legend()
   plt.show()
+
+def plot_feature_sim(fsha_model, dataset):
+  dif_category_fsha = []
+  same_category_fsha = []
+
+  for k in range(10):
+    c_set = list(dataset)
+    c1 = []
+    c2 = []
+    c3 = []
+    c1_x = []
+    c2_x = []
+    c3_x = []
+    c1_y = []
+    c2_y = []
+    c3_y = []
+    for j in range(2000):
+      if len(c1) < 64:
+        if c_set[j][1].numpy() == np.array(k):
+          c1_x.append(c_set[j][0])
+          c1_y.append(c_set[j][1])
+          c1.append(j)
+      elif len(c3) < 64:
+        if c_set[j][1].numpy() == np.array(k):
+          c3_x.append(c_set[j][0])
+          c3_y.append(c_set[j][1])
+          c3.append(j)
+      if len(c2) < 64:
+        if c_set[j][1].numpy() == np.array((k+1)%10):
+          c2_x.append(c_set[j][0])
+          c2_y.append(c_set[j][1])
+          c2.append(j)
+    
+
+    c1_x = tf.stack(c1_x, axis = 0)
+    c2_x = tf.stack(c2_x, axis = 0)
+    c3_x = tf.stack(c3_x, axis = 0)
+
+    gp1 = fsha_model.f(c1_x, training=False).numpy()
+    gp2 = fsha_model.f(c2_x, training=False).numpy()
+    gp3 = fsha_model.f(c3_x, training=False).numpy()
+
+    dif_category_4k_fsha = []
+    con_image_4k_fsha = []
+    same_category_4k_fsha = []
+    dif_category_4k_sl = []
+    con_image_4k_sl = []
+    same_category_4k_sl = []
+    for i in range(64):
+      p1 = gp1[i].reshape(4096,)
+      p2 = gp2[i].reshape(4096,)
+      p3 = gp3[i].reshape(4096,)
+      dif_category_4k_fsha.append(get_cos_sim(p1,p2))
+      same_category_4k_fsha.append(get_cos_sim(p1,p3))
+      dif_category_fsha.append(get_cos_sim(p1,p2))
+      same_category_fsha.append(get_cos_sim(p1,p3))
+
+    dif_category_4k_fsha = np.array(dif_category_4k_fsha)
+    same_category_4k_fsha = np.array(same_category_4k_fsha)
+    print("category: ", k)
+    print(np.mean(dif_category_4k_fsha), np.mean(same_category_4k_fsha))
+    fsha_4k = [np.mean(dif_category_4k_fsha), np.mean(same_category_4k_fsha)]
+    fsha_std_4k = [np.std(dif_category_4k_fsha), np.std(same_category_4k_fsha)]
+    print(fsha_std_4k)
+  
+  print("==================================================")
+  print("average gradient: ")
+  dif_category_4k_fsha = np.array(dif_category_fsha)
+  same_category_4k_fsha = np.array(same_category_fsha)
+  print(np.mean(dif_category_4k_fsha), np.mean(same_category_4k_fsha))
+  fsha_4k = [np.mean(dif_category_4k_fsha), np.mean(same_category_4k_fsha)]
+  fsha_std_4k = [np.std(dif_category_4k_fsha), np.std(same_category_4k_fsha)]
+  print(fsha_std_4k)
+
 
 
 def prepare_data(cpriv):
